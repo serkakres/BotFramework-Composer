@@ -5,17 +5,18 @@
 /** @jsx jsx */
 import { jsx } from '@emotion/core';
 import { useContext, useRef, useEffect, useState } from 'react';
-import { PropTypes } from 'prop-types';
 import isEmpty from 'lodash/isEmpty';
 import get from 'lodash/get';
 import { DetailsList, DetailsListLayoutMode, SelectionMode } from 'office-ui-fabric-react/lib/DetailsList';
 import { Link } from 'office-ui-fabric-react/lib/Link';
 import { IconButton } from 'office-ui-fabric-react/lib/Button';
+import { IContextualMenuItem } from 'office-ui-fabric-react/lib/ContextualMenu';
 import { TooltipHost } from 'office-ui-fabric-react/lib/Tooltip';
 import { ScrollablePane, ScrollbarVisibility } from 'office-ui-fabric-react/lib/ScrollablePane';
 import { Sticky, StickyPositionType } from 'office-ui-fabric-react/lib/Sticky';
 import formatMessage from 'format-message';
 import { NeutralColors, FontSizes } from '@uifabric/fluent-theme';
+import { DialogInfo, LuFile } from '@bfc/shared';
 
 import { OpenConfirmModal, DialogStyle } from '../../components/Modal';
 import { StoreContext } from '../../store';
@@ -23,14 +24,30 @@ import * as luUtil from '../../utils/luUtil';
 import { navigateTo } from '../../utils';
 
 import { formCell, luPhraseCell } from './styles';
+interface TableViewProps {
+  activeDialog: DialogInfo | undefined;
+  onClickEdit: ({ fileId: string }) => void;
+}
 
-export default function TableView(props) {
+interface Intent {
+  name: string;
+  phrases: string[];
+  fileId: string;
+  used: boolean;
+  state: string;
+}
+
+const TableView: React.FC<TableViewProps> = props => {
   const { state } = useContext(StoreContext);
   const { dialogs, luFiles } = state;
   const { activeDialog, onClickEdit } = props;
-  const [intents, setIntents] = useState([]);
+  const [intents, setIntents] = useState<Intent[]>([]);
   const listRef = useRef(null);
-
+  function checkErrors(files: LuFile[]): LuFile[] {
+    return files.filter(file => {
+      return luUtil.isValid(file.diagnostics) === false;
+    });
+  }
   useEffect(() => {
     if (isEmpty(luFiles)) return;
 
@@ -40,8 +57,8 @@ export default function TableView(props) {
       return;
     }
 
-    const allIntents = luFiles.reduce((result, luFile) => {
-      const items = [];
+    const allIntents = luFiles.reduce((result: Intent[], luFile: LuFile) => {
+      const items: Intent[] = [];
       const luDialog = dialogs.find(dialog => luFile.id === dialog.id);
       get(luFile, 'parsedContent.LUISJsonStructure.utterances', []).forEach(utterance => {
         const name = utterance.intent;
@@ -54,7 +71,7 @@ export default function TableView(props) {
             name,
             phrases: [utterance.text],
             fileId: luFile.id,
-            used: luDialog.luIntents.includes(name), // used by it's dialog or not
+            used: luDialog ? luDialog.luIntents.includes(name) : false, // used by it's dialog or not
             state,
           });
         }
@@ -70,13 +87,7 @@ export default function TableView(props) {
     }
   }, [luFiles, activeDialog]);
 
-  function checkErrors(files) {
-    return files.filter(file => {
-      return luUtil.isValid(file.diagnostics) === false;
-    });
-  }
-
-  function getIntentState(file) {
+  function getIntentState(file: LuFile): string {
     if (!file.diagnostics) {
       return formatMessage('Error');
     } else if (file.status && file.status.lastUpdateTime >= file.status.lastPublishTime) {
@@ -88,7 +99,7 @@ export default function TableView(props) {
     }
   }
 
-  async function showErrors(files) {
+  async function showErrors(files: LuFile[]) {
     for (const file of files) {
       const errorMsg = luUtil.combineMessage(file.diagnostics);
       const errorTitle = formatMessage('There was a problem parsing {fileId}.lu file.', { fileId: file.id });
@@ -103,7 +114,7 @@ export default function TableView(props) {
     }
   }
 
-  const getTemplatesMoreButtons = (item, index) => {
+  const getTemplatesMoreButtons = (item, index): IContextualMenuItem[] => {
     const buttons = [
       {
         key: 'edit',
@@ -259,9 +270,6 @@ export default function TableView(props) {
       </ScrollablePane>
     </div>
   );
-}
-
-TableView.propTypes = {
-  activeDialog: PropTypes.object,
-  onClickEdit: PropTypes.func,
 };
+
+export default TableView;
